@@ -1,56 +1,40 @@
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
-import url from "url";
 
 const app = express();
 app.use(cors());
 
 app.get("/proxy", async (req, res) => {
-    const target = req.query.url;
-
-    if (!target) {
-        return res.status(400).send("Missing url parameter");
-    }
-
     try {
-        const parsed = url.parse(target);
-        const baseUrl = `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/[^\/]*$/, "")}`;
+        const targetUrl = req.query.url;
+        if (!targetUrl) return res.status(400).send("Missing url parameter");
 
-        const response = await fetch(target, {
+        const response = await fetch(targetUrl, {
             headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
                 "Accept": "*/*",
                 "Connection": "keep-alive"
             }
         });
 
-        let text = await response.text();
+        let body = await response.text();
 
-        // 👉 Si es un .m3u8, convertir rutas relativas a absolutas
-        if (target.endsWith(".m3u8")) {
-            text = text.replace(/^(?!#)(.*\.m3u8)/gm, (match) => {
-                return `${req.protocol}://${req.get("host")}/proxy?url=${baseUrl}/${match}`;
-            });
+        // 🔥 Reemplazar URL internas del playlist
+        body = body.replace(/(chunklist_.*\.m3u8)/g, (match) => {
+            return `https://hls-proxy-tveo.onrender.com/proxy?url=${targetUrl.replace("playlist.m3u8", match)}`;
+        });
 
-            text = text.replace(/^(?!#)(.*\.ts)/gm, (match) => {
-                return `${req.protocol}://${req.get("host")}/proxy?url=${baseUrl}/${match}`;
-            });
-        }
+        // 🔥 Encabezado correcto para HLS
+        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
 
-        res.set(
-            "Content-Type",
-            response.headers.get("content-type") || "application/vnd.apple.mpegurl"
-        );
-        res.send(text);
+        return res.send(body);
 
-    } catch (error) {
-        console.error("Proxy error:", error);
+    } catch (err) {
+        console.error(err);
         res.status(500).send("Proxy error");
     }
 });
 
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-    console.log(`HLS Proxy running on port ${PORT}`);
-});
+app.listen(10000, () => console.log("HLS proxy running"));
