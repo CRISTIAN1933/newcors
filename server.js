@@ -21,20 +21,26 @@ app.get("/proxy", async (req, res) => {
 
         let body = await response.text();
 
-        // 🔥 Reemplazar URL internas del playlist
-        body = body.replace(/(chunklist_.*\.m3u8)/g, (match) => {
-            return `https://hls-proxy-tveo.onrender.com/proxy?url=${targetUrl.replace("playlist.m3u8", match)}`;
+        // =====🔥 FIX REALISTA PARA TODOS LOS HLS =====
+        // Detecta CUALQUIER ruta de playlist secundaria
+        body = body.replace(/(chunklist.*\.m3u8)/gi, (match) => {
+            const newUrl = targetUrl.replace(/playlist.*\.m3u8/i, match);
+            return `https://hls-proxy-tveo.onrender.com/proxy?url=${newUrl}`;
         });
 
-        // 🔥 Encabezado correcto para HLS
-        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+        // 🔥 También resolver segmentos .ts
+        body = body.replace(/(seg.*\.ts)/gi, (match) => {
+            const newUrl = targetUrl.replace(/playlist.*\.m3u8/i, match);
+            return `https://hls-proxy-tveo.onrender.com/proxy?url=${newUrl}`;
+        });
 
-        return res.send(body);
+        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+        res.send(body);
 
     } catch (err) {
-        console.error(err);
+        console.error("Proxy error:", err);
         res.status(500).send("Proxy error");
     }
 });
 
-app.listen(10000, () => console.log("HLS proxy running"));
+app.listen(10000, () => console.log("🔥 HLS proxy running on port 10000"));
