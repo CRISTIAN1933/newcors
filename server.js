@@ -1,9 +1,19 @@
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
+import path from "path";
+import url from "url";
 
 const app = express();
 app.use(cors());
+
+function absoluteURL(base, relative) {
+    try {
+        return new URL(relative, base).toString();
+    } catch {
+        return relative;
+    }
+}
 
 app.get("/proxy", async (req, res) => {
     try {
@@ -21,26 +31,30 @@ app.get("/proxy", async (req, res) => {
 
         let body = await response.text();
 
-        // =====🔥 FIX REALISTA PARA TODOS LOS HLS =====
-        // Detecta CUALQUIER ruta de playlist secundaria
-        body = body.replace(/(chunklist.*\.m3u8)/gi, (match) => {
-            const newUrl = targetUrl.replace(/playlist.*\.m3u8/i, match);
-            return `https://hls-proxy-tveo.onrender.com/proxy?url=${newUrl}`;
-        });
+        const baseUrl = targetUrl.substring(0, targetUrl.lastIndexOf("/") + 1);
 
-        // 🔥 También resolver segmentos .ts
-        body = body.replace(/(seg.*\.ts)/gi, (match) => {
-            const newUrl = targetUrl.replace(/playlist.*\.m3u8/i, match);
-            return `https://hls-proxy-tveo.onrender.com/proxy?url=${newUrl}`;
-        });
+        // 🔥 Reescribir TODAS las rutas internas (master, chunklists, ts, key)
+        body = body.replace(
+            /^(?!#)(.*)$/gm,
+            (line) => {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.startsWith("#")) return line;
 
+                const absolute = absoluteURL(baseUrl, trimmed);
+
+                return `https://hls-proxy-tveo.onrender.com/proxy?url=${absolute}`;
+            }
+        );
+
+        // 🔥 Siempre como texto
         res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-        res.send(body);
+
+        return res.send(body);
 
     } catch (err) {
-        console.error("Proxy error:", err);
+        console.error(err);
         res.status(500).send("Proxy error");
     }
 });
 
-app.listen(10000, () => console.log("🔥 HLS proxy running on port 10000"));
+app.listen(10000, () => console.log("HLS proxy fully running"));
